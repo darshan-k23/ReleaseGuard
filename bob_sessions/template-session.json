@@ -1,0 +1,20 @@
+{
+  "sessionId": "replace-with-bob-session-id",
+  "prompt": "Paste the sanitized prompt used for this session. Do not include secrets.",
+  "summary": "",
+  "findings": [],
+  "filesChanged": [],
+  "validation": [],
+  "before": {
+    "analysisId": "",
+    "status": "",
+    "score": null,
+    "openFindings": []
+  },
+  "after": {
+    "analysisId": "",
+    "status": "",
+    "score": null,
+    "openFindings": []
+  }
+}

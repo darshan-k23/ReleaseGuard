@@ -1,0 +1,16 @@
+{
+  "name": "releaseguard-backend",
+  "version": "1.0.0",
+  "description": "ReleaseGuard deterministic ShopSphere repository analyzer API",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}

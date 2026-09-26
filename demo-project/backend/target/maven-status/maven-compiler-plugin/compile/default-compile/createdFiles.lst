@@ -1,0 +1,4 @@
+com\shopsphere\controller\AuthController$LoginRequest.class
+com\shopsphere\ShopSphereApplication.class
+com\shopsphere\service\AuthService.class
+com\shopsphere\controller\AuthController.class

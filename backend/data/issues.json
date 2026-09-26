@@ -1,0 +1,71 @@
+[
+  {
+    "id": "CFG-01",
+    "title": "Frontend targets a different backend port",
+    "severity": "HIGH",
+    "category": "Configuration",
+    "affectedFile": "demo-project/frontend/src/api/client.js",
+    "explanation": "The ShopSphere client uses port 9090, while the Spring Boot server is configured for port 8080.",
+    "evidence": [
+      { "file": "demo-project/frontend/src/api/client.js", "detail": "const API_BASE = \"http://localhost:9090/api\";" },
+      { "file": "demo-project/backend/src/main/resources/application.properties", "detail": "server.port=8080" }
+    ],
+    "risk": "The browser requests the API at a port where this backend is not configured to listen.",
+    "recommendedFix": "Use the backend's configured port or provide a single configurable API base URL."
+  },
+  {
+    "id": "APP-01",
+    "title": "Products endpoint is not implemented",
+    "severity": "HIGH",
+    "category": "Configuration",
+    "affectedFile": "demo-project/frontend/src/api/client.js",
+    "explanation": "The ShopSphere frontend requests /api/products, but the backend controller source only defines the /api/auth route.",
+    "evidence": [
+      { "file": "demo-project/frontend/src/api/client.js", "detail": "fetch(`${API_BASE}/products`)" },
+      { "file": "demo-project/backend/src/main/java/com/shopsphere/controller/AuthController.java", "detail": "@RequestMapping(\"/api/auth\")" }
+    ],
+    "risk": "The product request cannot be served by the current backend, leaving the demo catalog empty.",
+    "recommendedFix": "Implement the endpoint if product data is in scope, or remove the unsupported request from the demo UI."
+  },
+  {
+    "id": "CFG-02",
+    "title": "MySQL datasource has no JDBC driver dependency",
+    "severity": "HIGH",
+    "category": "Configuration",
+    "affectedFile": "demo-project/backend/pom.xml",
+    "explanation": "The backend configures a MySQL datasource and includes Spring Data JPA, but the Maven dependencies do not declare a MySQL JDBC driver.",
+    "evidence": [
+      { "file": "demo-project/backend/src/main/resources/application.properties", "detail": "spring.datasource.url=jdbc:mysql://prod-db.shopsphere.internal:3306/shopsphere" },
+      { "file": "demo-project/backend/pom.xml", "detail": "Dependencies include spring-boot-starter-data-jpa but no MySQL connector." }
+    ],
+    "risk": "The configured datasource cannot be initialized with the declared runtime dependencies.",
+    "recommendedFix": "For this database-free demo, remove the unused datasource/JPA settings; otherwise declare and configure the intended driver."
+  },
+  {
+    "id": "SEC-01",
+    "title": "Verbose DEBUG logging is configured",
+    "severity": "MEDIUM",
+    "category": "Security",
+    "affectedFile": "demo-project/backend/src/main/resources/application.properties",
+    "evidence": [
+      { "file": "demo-project/backend/src/main/resources/application.properties", "detail": "logging.level.root=DEBUG; logging.level.org.springframework.web=DEBUG" }
+    ],
+    "explanation": "Root and Spring Web log levels are set to DEBUG. The inspected source does not show request-body or authorization-header logging.",
+    "risk": "Debug-level framework logs can be unnecessarily verbose outside local development.",
+    "recommendedFix": "Use INFO or WARN for normal operation and enable DEBUG only when troubleshooting."
+  },
+  {
+    "id": "BUILD-01",
+    "title": "ShopSphere frontend is missing its Vite entry file",
+    "severity": "HIGH",
+    "category": "Build",
+    "affectedFile": "demo-project/frontend/index.html",
+    "explanation": "The frontend package defines a Vite build script, but there is no index.html at the Vite project root.",
+    "evidence": [
+      { "file": "demo-project/frontend/package.json", "detail": "The build script is \"vite build\"." },
+      { "file": "demo-project/frontend/", "detail": "The project root contains package.json and src/, but no index.html." }
+    ],
+    "risk": "The ShopSphere frontend production build fails before transforming application modules.",
+    "recommendedFix": "Add the Vite HTML entry with a root element and a module script for /src/main.jsx."
+  }
+]

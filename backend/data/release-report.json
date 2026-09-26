@@ -1,0 +1,44 @@
+{
+  "status": "RELEASE BLOCKED",
+  "statusSummary": "This demo snapshot is blocked by four source-backed integration/build issues. It is not a production-readiness assessment.",
+  "categories": [
+    {
+      "name": "Build",
+      "status": "BLOCKER",
+      "summary": "The ShopSphere Vite build fails because its project root has no index.html entry file."
+    },
+    {
+      "name": "Tests",
+      "status": "PASS",
+      "summary": "All three ShopSphere backend unit tests passed local validation on 2026-09-26; refreshing this report does not rerun them."
+    },
+    {
+      "name": "Security",
+      "status": "WARNING",
+      "summary": "Root and Spring Web log levels are DEBUG. Source does not evidence request-body or credential logging."
+    },
+    {
+      "name": "Dependencies",
+      "status": "NOT CHECKED",
+      "summary": "This snapshot does not check dependency currency or scan for vulnerabilities."
+    },
+    {
+      "name": "Configuration",
+      "status": "BLOCKER",
+      "summary": "The frontend targets the wrong backend port, requests an unimplemented products endpoint, and the datasource has no declared JDBC driver."
+    },
+    {
+      "name": "Documentation",
+      "status": "NOT CHECKED",
+      "summary": "ShopSphere is a demo fixture, not a deployable production application; deployment readiness is not evaluated."
+    }
+  ],
+  "metrics": {
+    "issuesFound": 5,
+    "criticalBlockers": 4,
+    "warnings": 1,
+    "testsChecked": 3,
+    "testsPassed": 3,
+    "testsFailed": 0
+  }
+}

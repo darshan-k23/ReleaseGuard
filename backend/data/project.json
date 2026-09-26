@@ -1,0 +1,7 @@
+{
+  "name": "ShopSphere",
+  "description": "E-commerce demo application with a React + Vite frontend and Spring Boot 3.5.16 backend",
+  "stack": ["React", "Vite", "Spring Boot 3.5.16", "Java 25", "Maven"],
+  "repository": "./demo-project",
+  "lastAnalyzed": null
+}
