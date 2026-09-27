@@ -254,7 +254,35 @@ sequenceDiagram
 
 ---
 
-### 5. Deterministic Engine vs. AI Assistance
+### 5. 🧾 IBM Bob Session Summaries
+
+> These session summaries are the recorded artifacts of the actual IBM Bob remediation sessions used in the ReleaseGuard workflow. They provide an auditable record of the investigation, remediation, and validation process.
+
+ReleaseGuard pairs with developer-supervised IBM Bob sessions. When a release blocker is investigated, Bob's step-by-step reasoning, root cause analysis, candidate diffs, and local validation outputs can be exported and tracked in the [`bob_sessions/`](bob_sessions/) directory as verifiable audit records.
+
+| IBM Bob Session | Repository / Workspace | ReleaseGuard Finding | Purpose & Remediation Summary | Session Artifact |
+| :--- | :--- | :--- | :--- | :--- |
+| **Credential Remediation Session** | `security-blocked` | `SEC-HARDCODED-CREDENTIAL` (HIGH) | Investigated committed synthetic sentinel in `application.properties`, externalized password to `${DB_PASSWORD}`, and validated local build/test pass. | [`bob_sessions/README.md`](bob_sessions/README.md) |
+| **Workflow Session Template** | `workspace` | Standard Release Findings | Structured schema capturing session ID, prompt, findings inspected, files changed, and validation commands. | [`bob_sessions/template-session.json`](bob_sessions/template-session.json) |
+
+#### Session Record Schema
+
+For each captured IBM Bob session, the recorded audit artifact documents:
+
+- **Session Identifier:** The unique IBM Bob session or conversation ID.
+- **Repository / Workspace:** Target repository inspected (e.g., `security-blocked`, `configuration-risk`, or a public GitHub repo).
+- **Target Finding:** The exact ReleaseGuard rule ID (`SEC-HARDCODED-CREDENTIAL`, `INT-API-PORT-MISMATCH`, etc.).
+- **Bob Investigation:** Root cause analysis and files inspected by Bob.
+- **Surgical Diff:** Exact files modified and lines changed under developer supervision.
+- **Bob Validation:** Execution commands run by Bob (e.g., `npm test`, `npm run build`) and their results.
+- **ReleaseGuard Independent Verification:** Before/after release gate and score delta verified by ReleaseGuard.
+
+> [!NOTE]
+> **Privacy & Process Boundary:** ReleaseGuard does not automatically persist IBM Bob chat transcripts or credentials. Session notes are maintained as operator audit records in the repository to document real human-in-the-loop remediation sessions.
+
+---
+
+### 6. Deterministic Engine vs. AI Assistance
 
 | Aspect | Deterministic Engine (ReleaseGuard) | AI Assistance (Local LLM / Ollama) |
 | :--- | :--- | :--- |
@@ -265,7 +293,7 @@ sequenceDiagram
 
 ---
 
-### 6. Isolated Remediation Lifecycle
+### 7. Isolated Remediation Lifecycle
 
 ReleaseGuard manages remediation candidates through isolated lifecycle states:
 
@@ -281,7 +309,7 @@ ReleaseGuard manages remediation candidates through isolated lifecycle states:
 
 ---
 
-### 7. Interactive Demo Repositories
+### 8. Interactive Demo Repositories
 
 ReleaseGuard includes 6 dedicated demo repositories covering key release states:
 
@@ -297,7 +325,7 @@ ReleaseGuard includes 6 dedicated demo repositories covering key release states:
 
 ---
 
-### 8. Public GitHub Repository Support
+### 9. Public GitHub Repository Support
 
 ReleaseGuard analyzes public GitHub repositories using the same unified pipeline:
 
@@ -309,7 +337,7 @@ ReleaseGuard analyzes public GitHub repositories using the same unified pipeline
 
 ---
 
-### 9. System Architecture
+### 10. System Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -339,7 +367,37 @@ ReleaseGuard analyzes public GitHub repositories using the same unified pipeline
 
 ---
 
-### 10. Tech Stack
+### 10. System Architecture
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        React 18 + Vite Frontend                        │
+│   Dashboard  ·  Repository Gateway  ·  Evidence Viewer  ·  IBM Bob UI  │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ HTTP / REST
+┌───────────────────────────────────▼────────────────────────────────────┐
+│                       Express 4 Backend API (:8090)                    │
+│                                                                        │
+│   ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────┐   │
+│   │ Job & Workspace Mgr │  │  Stack Detector     │  │ allowlist    │   │
+│   │ /workspaces/<jobId> │  │  Node / Maven / etc │  │ commandRunner│   │
+│   └──────────┬──────────┘  └──────────┬──────────┘  └──────┬───────┘   │
+│              │                        │                    │           │
+│   ┌──────────▼────────────────────────▼────────────────────▼───────┐   │
+│   │               Deterministic Repository Analyzer                │   │
+│   │   Security  ·  Configuration  ·  Integration  ·  Docs  ·  Deps │   │
+│   └───────────────────────────────┬────────────────────────────────┘   │
+│                                   │                                    │
+│   ┌───────────────────────────────┴────────────────────────────────┐   │
+│   │      Optional LLM Assessment Service (:8091) / Ollama          │   │
+│   │      Non-fatal Explanation & Root-Cause Interpretation         │   │
+│   └────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 11. Tech Stack
 
 | Layer | Technologies |
 | :--- | :--- |
@@ -351,7 +409,7 @@ ReleaseGuard analyzes public GitHub repositories using the same unified pipeline
 
 ---
 
-### 11. Running Locally
+### 12. Running Locally
 
 #### Prerequisites
 - **Node.js**: v18.0.0 or higher
@@ -383,7 +441,7 @@ npm run dev
 
 ---
 
-### 12. Testing & Verification
+### 13. Testing & Verification
 
 Run the test suites across backend and frontend:
 
@@ -403,7 +461,7 @@ npm run build
 
 ---
 
-### 13. Core Engineering Principles
+### 14. Core Engineering Principles
 
 1. **Evidence Before Explanation:** Line citations, files, and outputs are gathered before generating AI summaries.
 2. **Human-in-the-Loop Remediation:** AI proposes surgical diffs; developers explicitly approve mutations.
