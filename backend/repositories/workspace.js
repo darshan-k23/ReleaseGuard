@@ -1,10 +1,15 @@
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { mkdir, rm, access } from "node:fs/promises";
 import { ApiError } from "../apiErrors.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-export const WORKSPACES_ROOT = path.resolve(currentDir, "..", "workspaces");
+
+export const WORKSPACES_ROOT = path.join(
+  os.tmpdir(),
+  "releaseguard-workspaces",
+);
 
 export function resolveWorkspacePath(jobId, root = WORKSPACES_ROOT) {
   if (typeof jobId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(jobId)) {
