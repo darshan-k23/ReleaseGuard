@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:unit": "node --test src/utils/analysisHistory.test.js",
+    "test": "npm run test:unit",
+    "test:unit": "node --test src/utils/analysisHistory.test.js src/utils/bobPrompts.test.js",
     "test:e2e": "playwright test"
   },
   "dependencies": {
