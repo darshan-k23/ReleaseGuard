@@ -28,10 +28,10 @@ export default function AnalysisHeader({ project, analysis, isAnalyzing, isLoadi
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">Release analysis</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-semibold text-slate-100">{project?.name || "ShopSphere"}</h2>
+            <h2 className="text-xl font-semibold text-slate-100">{project?.name || "Repository"}</h2>
             {analysis && <Badge tone={analysis.status === "RELEASE BLOCKED" ? "BLOCKER" : analysis.status === "VALIDATION INCOMPLETE" ? "WARNING" : "READY FOR REVIEW"}>{analysis.status}</Badge>}
           </div>
-          <p className="mt-1 text-sm text-slate-400">{project?.description || "Fixed repository target: demo-project/"}</p>
+          <p className="mt-1 text-sm text-slate-400">{project?.description || "Repository analysis"}</p>
         </div>
         <button
           type="button"

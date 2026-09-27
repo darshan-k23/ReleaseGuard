@@ -892,3 +892,81 @@ test("sanitizeErrorOutput redacts credentials and tokens", () => {
   assert.ok(sanitized.includes("[REDACTED]"));
 });
 
+test("POST /api/jobs/:jobId/analyze repeatedly re-analyzes the same job workspace and reflects file changes", async (t) => {
+  const jobStore = new JobStore();
+  const app = createApp({
+    jobStore,
+    fetchAssessment: async () => ({ status: "AVAILABLE" }),
+    runValidate: async () => ({
+      status: "PASS",
+      executions: [
+        { command: "npm run build", status: "PASS" },
+        { command: "npm test", status: "PASS" },
+      ],
+      checks: [
+        { id: "build", category: "Build", status: "PASS" },
+        { id: "tests", category: "Tests", status: "PASS" },
+      ],
+      build: { status: "PASS" },
+      tests: { status: "PASS" },
+    }),
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const job = jobStore.create({
+    repositoryUrl: "https://github.com/releaseguard-demo/security-blocked",
+    repositoryName: "security-blocked",
+    branch: "main",
+  });
+
+  const workspacePath = await createWorkspace(job.jobId);
+  jobStore.update(job.jobId, {
+    status: JOB_STATUS.CLONED,
+    workspacePath,
+  });
+
+  t.after(() => removeWorkspace(job.jobId));
+
+  // Initial files
+  await mkdir(path.join(workspacePath, "src", "api"), { recursive: true });
+  await writeFile(
+    path.join(workspacePath, "README.md"),
+    "# security-blocked\nRun build: `npm run build`\nEnvironment: SHOPSPHERE_DB_PASSWORD\nDeployment: deploy to production release procedure\n",
+  );
+  await writeFile(
+    path.join(workspacePath, "src", "api", "client.js"),
+    'const API_BASE = "http://localhost:8080/api";\n',
+  );
+  await writeFile(
+    path.join(workspacePath, "application.properties"),
+    "server.port=8080\nspring.datasource.password=demo-only-not-a-secret\nlogging.level.root=DEBUG\n",
+  );
+  await writeFile(
+    path.join(workspacePath, "package.json"),
+    JSON.stringify({ name: "security-blocked-service", scripts: { build: "node -e \"process.exit(0)\"", test: "node -e \"process.exit(0)\"" } }),
+  );
+
+  // First analysis run
+  const res1 = await fetch(`${baseUrl}/api/jobs/${job.jobId}/analyze`, { method: "POST" });
+  assert.equal(res1.status, 200);
+  const data1 = await res1.json();
+  assert.equal(data1.repository.name, "security-blocked");
+  assert.equal(data1.status, "RELEASE BLOCKED");
+  assert.equal(data1.findings.some((f) => f.ruleId === "SEC-HARDCODED-CREDENTIAL"), true);
+
+  // Modify workspace (remediate the secret)
+  await writeFile(
+    path.join(workspacePath, "application.properties"),
+    "server.port=8080\nspring.datasource.password=${DB_PASSWORD}\nlogging.level.root=INFO\n",
+  );
+
+  // Re-run analysis on the exact same job ID
+  const res2 = await fetch(`${baseUrl}/api/jobs/${job.jobId}/analyze`, { method: "POST" });
+  assert.equal(res2.status, 200);
+  const data2 = await res2.json();
+  assert.equal(data2.repository.name, "security-blocked");
+  assert.notEqual(data2.repository.name, "ShopSphere");
+  assert.equal(data2.findings.some((f) => f.ruleId === "SEC-HARDCODED-CREDENTIAL"), false);
+  assert.equal(data2.status, "READY FOR REVIEW");
+});
+

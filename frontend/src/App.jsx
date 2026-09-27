@@ -14,6 +14,7 @@ import ValidationChecks from "./components/ValidationChecks.jsx";
 import IBMWorkflow from "./components/IBMWorkflow.jsx";
 import AnalysisHistory from "./components/AnalysisHistory.jsx";
 import { readAnalysisHistory, saveAnalysisSummary } from "./utils/analysisHistory.js";
+import { executeReanalysis } from "./utils/reanalysis.js";
 import {
   getLatestAnalysis,
   getProject,
@@ -209,8 +210,20 @@ export default function App() {
     setAnalysisCompleted(false);
     try {
       const previousAnalysis = analysis;
-      const result = await runAnalysis();
-      setProject(result.project);
+      const { result, project: nextProject, validation: valData } = await executeReanalysis({
+        currentJob,
+        analysis,
+        validateJobFn: validateJob,
+        analyzeJobFn: analyzeJob,
+        runAnalysisFn: runAnalysis,
+      });
+
+      if (valData && currentJob) {
+        currentJob.validation = valData;
+        setCurrentJob({ ...currentJob });
+      }
+
+      setProject(nextProject);
       setAnalysis(result);
       const nextHistory = saveAnalysisSummary(result);
       setAnalysisHistory(nextHistory);
