@@ -960,10 +960,15 @@ export function createApp({
   return app;
 }
 
+const app = createApp();
+
+export default app;
+
 export function startServer({ port = process.env.PORT || 8090, host = "127.0.0.1" } = {}) {
-  const app = createApp();
   const server = app.listen(port, host, () => {
-    console.log(`ReleaseGuard backend listening on http://${host}:${server.address().port}`);
+    console.log(
+      `ReleaseGuard backend listening on http://${host}:${server.address().port}`
+    );
   });
   return server;
 }
