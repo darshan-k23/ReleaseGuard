@@ -72,7 +72,7 @@ class AuthServiceTest {
   ]);
   assert.equal(result.findings[0].evidence, "spring.datasource.password=abc");
   assert.equal(result.findings[1].evidence, "shopsphere.demo.password=demo-only-not-a-secret");
-  assert.equal(result.findings[1].severity, "LOW");
+  assert.equal(result.findings[1].severity, "HIGH");
   assert.equal(result.findings[2].evidence, "auth.token=abc123456789");
 });
 

@@ -1,3 +1,11 @@
-export { analyzeRepository, getProjectMetadata } from "./analyzeRepository.js";
+export { analyzeRepository, getProjectMetadata, deriveProject } from "./analyzeRepository.js";
 export { CATEGORIES, CHECK_STATUS, FINDING_STATUS, SEVERITY, createCheck } from "./types.js";
 export { detectStack, ECOSYSTEM_STATUS } from "./stackDetector.js";
+export { computeScore, deriveReleaseStatus, SCORE_METHOD } from "./scoring.js";
+export { runSecurityRule } from "./rules/security.js";
+export { runConfigurationRule } from "./rules/configuration.js";
+export { runDocumentationRule } from "./rules/documentation.js";
+export { runIntegrationRule } from "./rules/integration.js";
+export { runDependencyRule, runDependenciesRule } from "./rules/dependency.js";
+export { runTestsRule } from "./rules/tests.js";
+export { runBuildRule } from "./rules/build.js";

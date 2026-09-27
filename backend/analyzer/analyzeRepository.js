@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { DEMO_PROJECT_ROOT } from "./projectRoot.js";
 import { createCheck, CHECK_STATUS, CATEGORIES } from "./types.js";
 import { walkProject } from "./utils/fileWalker.js";
@@ -7,7 +8,7 @@ import { runSecurityRule } from "./rules/security.js";
 import { runConfigurationRule } from "./rules/configuration.js";
 import { runIntegrationRule } from "./rules/integration.js";
 import { runDocumentationRule } from "./rules/documentation.js";
-import { runDependenciesRule } from "./rules/dependencies.js";
+import { runDependencyRule } from "./rules/dependency.js";
 import { runTestsRule } from "./rules/tests.js";
 import { runBuildRule } from "./rules/build.js";
 import { computeScore, deriveReleaseStatus, SCORE_METHOD } from "./scoring.js";
@@ -16,10 +17,10 @@ function extractXmlValue(text, tagName) {
   return new RegExp(`<${tagName}>([^<]+)<\\/${tagName}>`).exec(text)?.[1]?.trim() || null;
 }
 
-function deriveProject(files, analyzedAt = null) {
-  const pom = files.find((file) => file.relativePath === "backend/pom.xml");
+export function deriveProject(files, analyzedAt = null, customMetadata = {}) {
+  const pom = files.find((file) => file.relativePath === "backend/pom.xml" || file.relativePath === "pom.xml" || file.relativePath.endsWith("pom.xml"));
   const readme = files.find((file) => file.relativePath.toLowerCase() === "readme.md");
-  const frontendManifest = files.find((file) => file.relativePath === "frontend/package.json");
+  const frontendManifest = files.find((file) => file.relativePath === "frontend/package.json" || file.relativePath === "package.json" || file.relativePath.endsWith("package.json"));
   const parent = pom?.text.match(/<parent>([\s\S]*?)<\/parent>/)?.[1] || "";
   let frontend = {};
   try {
@@ -31,6 +32,8 @@ function deriveProject(files, analyzedAt = null) {
   const stack = [];
   if (frontend.dependencies?.react || frontend.devDependencies?.react) stack.push("React");
   if (frontend.dependencies?.vite || frontend.devDependencies?.vite) stack.push("Vite");
+  if (frontend.dependencies?.express) stack.push("Express");
+  if (frontend.dependencies?.next) stack.push("Next.js");
   const bootVersion = extractXmlValue(parent, "version");
   const javaVersion = pom?.text.match(/<java\.version>([^<]+)<\/java\.version>/)?.[1] || null;
   if (bootVersion) stack.push(`Spring Boot ${bootVersion}`);
@@ -39,16 +42,16 @@ function deriveProject(files, analyzedAt = null) {
 
   const heading = readme?.text.match(/^#\s+(.+)$/m)?.[1]?.trim();
   return {
-    name: heading || extractXmlValue(pom?.text || "", "name") || "ShopSphere",
-    description: extractXmlValue(pom?.text || "", "description") || "ShopSphere demo repository",
-    stack,
-    repository: "demo-project",
+    name: customMetadata.name || heading || extractXmlValue(pom?.text || "", "name") || frontend.name || "Repository",
+    description: customMetadata.description || extractXmlValue(pom?.text || "", "description") || frontend.description || "Analyzed repository",
+    stack: customMetadata.stack || stack,
+    repository: customMetadata.repository || "workspace",
     lastAnalyzed: analyzedAt,
   };
 }
 
-export async function getProjectMetadata() {
-  const files = await walkProject(DEMO_PROJECT_ROOT);
+export async function getProjectMetadata(projectRoot = DEMO_PROJECT_ROOT) {
+  const files = await walkProject(projectRoot);
   return deriveProject(files);
 }
 
@@ -96,9 +99,32 @@ function createReleasePlan(findings) {
 }
 
 function createMetrics(findings, checks) {
-  const testCheck = checks.find((check) => check.id === "shopsphere-backend-tests");
-  const frontendBuild = checks.find((check) => check.id === "shopsphere-frontend-build");
-  const backendBuild = checks.find((check) => check.id === "shopsphere-backend-build");
+  const testChecks = checks.filter((check) => check.category === "Tests");
+  const buildChecks = checks.filter((check) => check.category === "Build");
+
+  const overallTestStatus = testChecks.length === 0
+    ? CHECK_STATUS.NOT_RUN
+    : testChecks.some((c) => c.status === CHECK_STATUS.FAIL)
+      ? CHECK_STATUS.FAIL
+      : testChecks.every((c) => c.status === CHECK_STATUS.PASS)
+        ? CHECK_STATUS.PASS
+        : CHECK_STATUS.NOT_RUN;
+
+  const overallBuildStatus = buildChecks.length === 0
+    ? CHECK_STATUS.NOT_RUN
+    : buildChecks.some((c) => c.status === CHECK_STATUS.FAIL)
+      ? CHECK_STATUS.FAIL
+      : buildChecks.every((c) => c.status === CHECK_STATUS.PASS)
+        ? CHECK_STATUS.PASS
+        : CHECK_STATUS.NOT_RUN;
+
+  const totalTestsRun = testChecks.reduce((sum, c) => sum + (c.testsRun || 0), 0);
+  const totalTestsPassed = testChecks.reduce((sum, c) => sum + (c.testsPassed || 0), 0);
+  const totalTestsFailed = testChecks.reduce((sum, c) => sum + (c.testsFailed || 0), 0);
+
+  const frontendBuild = checks.find((check) => check.id.includes("frontend")) || buildChecks[0];
+  const backendBuild = checks.find((check) => check.id.includes("backend") || check.id.includes("maven")) || buildChecks[0];
+
   return {
     issuesFound: findings.length,
     criticalBlockers: findings.filter((finding) =>
@@ -107,12 +133,12 @@ function createMetrics(findings, checks) {
     warnings: findings.filter((finding) =>
       ["MEDIUM", "LOW"].includes(finding.severity),
     ).length,
-    testStatus: testCheck?.status || CHECK_STATUS.NOT_RUN,
-    testsChecked: testCheck?.testsRun || 0,
-    testsPassed: testCheck?.testsPassed || 0,
-    testsFailed: testCheck?.testsFailed || 0,
-    frontendBuildStatus: frontendBuild?.status || CHECK_STATUS.NOT_RUN,
-    backendBuildStatus: backendBuild?.status || CHECK_STATUS.NOT_RUN,
+    testStatus: overallTestStatus,
+    testsChecked: totalTestsRun,
+    testsPassed: totalTestsPassed,
+    testsFailed: totalTestsFailed,
+    frontendBuildStatus: frontendBuild?.status || overallBuildStatus,
+    backendBuildStatus: backendBuild?.status || overallBuildStatus,
   };
 }
 
@@ -120,12 +146,15 @@ function createStatusSummary(status, findings, checks) {
   const highFindings = findings.filter((finding) =>
     ["CRITICAL", "HIGH"].includes(finding.severity),
   ).length;
-  const testCheck = checks.find((check) => check.id === "shopsphere-backend-tests");
+  const testChecks = checks.filter((check) => check.category === "Tests");
   const failedChecks = checks.filter((check) => check.status === CHECK_STATUS.FAIL);
   const unrunChecks = checks.filter((check) => check.status === CHECK_STATUS.NOT_RUN);
-  const validationSummary = testCheck
-    ? `Backend tests ${testCheck.status.toLowerCase()} (${testCheck.testsPassed}/${testCheck.testsRun} passed).`
-    : "Backend test result unavailable.";
+
+  let validationSummary = "Validation completed.";
+  if (testChecks.length > 0) {
+    const passedCount = testChecks.filter((c) => c.status === CHECK_STATUS.PASS).length;
+    validationSummary = `${passedCount}/${testChecks.length} test check(s) passed.`;
+  }
 
   if (status === "RELEASE BLOCKED") {
     return `Release blocked by ${highFindings} open high/critical finding(s)${failedChecks.length ? ` and ${failedChecks.length} failed validation check(s)` : ""}. ${validationSummary} This is not a production-readiness certification.`;
@@ -133,17 +162,20 @@ function createStatusSummary(status, findings, checks) {
   if (status === "VALIDATION INCOMPLETE") {
     return `No high-severity blocker was found, but ${unrunChecks.length} validation check(s) did not run. ${validationSummary} Manual review is required.`;
   }
-  return `No high-severity blocker was found and the available checks completed. ${validationSummary} Manual release review is still required.`;
+  return `No high-severity blocker was found and all applicable validation checks completed. ${validationSummary} Manual release review is still required.`;
 }
 
-export async function analyzeRepository() {
+export async function analyzeRepository(projectRoot = DEMO_PROJECT_ROOT, options = {}) {
   const startedAt = Date.now();
-  const files = await walkProject(DEMO_PROJECT_ROOT);
+  const root = path.resolve(projectRoot);
+  const files = await walkProject(root);
   const context = {
-    projectRoot: DEMO_PROJECT_ROOT,
+    projectRoot: root,
     files,
+    stack: options.stack || null,
+    validation: options.validation || null,
     byPath: new Map(files.map((file) => [file.relativePath, file])),
-    runCommand: (commandId) => runAllowlistedCommand(commandId, DEMO_PROJECT_ROOT),
+    runCommand: options.runCommand || ((commandId) => runAllowlistedCommand(commandId, root)),
   };
 
   const staticResults = [
@@ -151,7 +183,7 @@ export async function analyzeRepository() {
     runConfigurationRule(context),
     runIntegrationRule(context),
     runDocumentationRule(context),
-    runDependenciesRule(context),
+    runDependencyRule(context),
   ];
   const testResult = await runTestsRule(context);
   const buildResult = await runBuildRule(context);
@@ -175,8 +207,8 @@ export async function analyzeRepository() {
   const analyzedAt = new Date().toISOString();
 
   return {
-    analysisId: randomUUID(),
-    project: deriveProject(files, analyzedAt),
+    analysisId: options.analysisId || randomUUID(),
+    project: deriveProject(files, analyzedAt, options.project || {}),
     analyzedAt,
     durationMs: Date.now() - startedAt,
     status,

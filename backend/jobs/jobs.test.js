@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile, readFile, access } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createApp } from "../server.js";
@@ -564,6 +564,310 @@ test("POST /api/jobs/:jobId/validate marks the job FAILED (not a fabricated PASS
   await removeWorkspace(jobId);
 });
 
+test("POST /api/jobs/:jobId/analyze runs deterministic static analysis, collects evidence, calls LLM, and attaches structured assessment", async (t) => {
+  const jobStore = new JobStore();
+  const jobId = "test-analyze-job";
+  const workspacePath = await createWorkspace(jobId);
+  await writeFile(
+    path.join(workspacePath, "application.properties"),
+    "server.port=8080\nspring.datasource.password=hardcoded-secret\nlogging.level.root=DEBUG\n",
+  );
+  await writeFile(
+    path.join(workspacePath, "README.md"),
+    "# Test Project\n\nRun npm run build\n\n## Deployment\nDeploy to production server.\n",
+  );
+
+  jobStore.create({
+    jobId,
+    repositoryUrl: "https://github.com/owner/repo",
+    repositoryName: "test-repo",
+    status: JOB_STATUS.CLONED,
+    workspacePath,
+  });
+
+  const mockAssessment = {
+    summary: "Release contains high severity secrets",
+    rootCauses: ["Hardcoded password in properties file"],
+    riskAssessment: { level: "HIGH", rationale: "Secrets in source" },
+    recommendedFixes: [{ title: "Remove secret", fix: "Use env var" }],
+    validationPlan: [{ step: "Run tests", expectedOutcome: "Pass" }],
+    confidence: 0.95,
+    limitations: ["Static evaluation only"],
+  };
+
+  let assessmentPayload = null;
+  const app = createApp({
+    jobStore,
+    fetchAssessment: async (evidence) => {
+      assessmentPayload = evidence;
+      return mockAssessment;
+    },
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const res = await fetch(`${baseUrl}/api/jobs/${jobId}/analyze`, { method: "POST" });
+  assert.equal(res.status, 200);
+  const analysis = await res.json();
+
+  // Verify final analysis structure
+  assert.ok(analysis.job);
+  assert.equal(analysis.job.jobId, jobId);
+  assert.ok(analysis.repository);
+  assert.equal(analysis.repository.name, "test-repo");
+  assert.ok(Array.isArray(analysis.stack));
+  assert.ok(Array.isArray(analysis.checks));
+  assert.ok(Array.isArray(analysis.findings));
+  assert.equal(typeof analysis.score, "number");
+  assert.ok(analysis.releaseDecision);
+  assert.ok(analysis.llmAssessment);
+  assert.equal(analysis.llmAssessment.status, "AVAILABLE");
+  assert.equal(analysis.llmAssessment.summary, mockAssessment.summary);
+  assert.ok(analysis.generatedAt);
+
+  // Evidence sent to LLM was relevant
+  assert.equal(assessmentPayload.repository, "test-repo");
+  assert.ok(Array.isArray(assessmentPayload.findings));
+
+  // Stored on the job
+  const storedJob = jobStore.get(jobId);
+  assert.ok(storedJob.analysis);
+  assert.equal(storedJob.analysis.score, analysis.score);
+  assert.equal(storedJob.assessment.status, "AVAILABLE");
+
+  await removeWorkspace(jobId);
+});
+
+test("POST /api/jobs/:jobId/analyze keeps LLM failure non-fatal and marks llmAssessment UNAVAILABLE", async (t) => {
+  const jobStore = new JobStore();
+  const jobId = "test-analyze-llm-fail-job";
+  const workspacePath = await createWorkspace(jobId);
+  await writeFile(path.join(workspacePath, "README.md"), "# Project\n");
+
+  jobStore.create({
+    jobId,
+    repositoryUrl: "https://github.com/owner/repo",
+    repositoryName: "test-repo",
+    status: JOB_STATUS.CLONED,
+    workspacePath,
+  });
+
+  const app = createApp({
+    jobStore,
+    fetchAssessment: async () => {
+      throw new Error("Ollama connection refused");
+    },
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const res = await fetch(`${baseUrl}/api/jobs/${jobId}/analyze`, { method: "POST" });
+  assert.equal(res.status, 200);
+  const analysis = await res.json();
+
+  // Deterministic analysis still succeeded
+  assert.equal(typeof analysis.score, "number");
+  assert.ok(analysis.releaseDecision);
+  assert.ok(Array.isArray(analysis.findings));
+  assert.ok(Array.isArray(analysis.checks));
+
+  // LLM assessment is marked UNAVAILABLE
+  assert.equal(analysis.llmAssessment.status, "UNAVAILABLE");
+  assert.ok(analysis.llmAssessment.error.includes("Ollama connection refused"));
+
+  await removeWorkspace(jobId);
+});
+
+test("POST /api/jobs/:jobId/assess performs standalone assessment", async (t) => {
+  const jobStore = new JobStore();
+  const jobId = "test-assess-endpoint-job";
+  const workspacePath = await createWorkspace(jobId);
+  await writeFile(path.join(workspacePath, "README.md"), "# Project\n");
+
+  jobStore.create({
+    jobId,
+    repositoryUrl: "https://github.com/owner/repo",
+    repositoryName: "test-repo",
+    status: JOB_STATUS.CLONED,
+    workspacePath,
+  });
+
+  const app = createApp({
+    jobStore,
+    fetchAssessment: async () => ({
+      summary: "Standalone assessment success",
+      rootCauses: [],
+      riskAssessment: { level: "LOW", rationale: "OK" },
+      recommendedFixes: [],
+      validationPlan: [],
+      confidence: 1,
+      limitations: [],
+    }),
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const res = await fetch(`${baseUrl}/api/jobs/${jobId}/assess`, { method: "POST" });
+  assert.equal(res.status, 200);
+  const analysis = await res.json();
+  assert.equal(analysis.llmAssessment.status, "AVAILABLE");
+  assert.equal(analysis.llmAssessment.summary, "Standalone assessment success");
+
+  await removeWorkspace(jobId);
+});
+
+test("POST /api/jobs/:jobId/remediation-plan stores patch candidate and GET /api/jobs/:jobId/remediation retrieves it", async (t) => {
+  const { RemediationStore, REMEDIATION_STATUS } = await import("../remediation/index.js");
+  const jobStore = new JobStore();
+  const remediationStore = new RemediationStore();
+  const jobId = "test-remediation-job";
+  const workspacePath = await createWorkspace(jobId);
+  const targetFile = "application.properties";
+  await writeFile(
+    path.join(workspacePath, targetFile),
+    "spring.datasource.password=secret123\n",
+  );
+
+  const finding = {
+    id: "SEC-HARDCODED-CREDENTIAL:test-fingerprint",
+    ruleId: "SEC-HARDCODED-CREDENTIAL",
+    category: "Security",
+    severity: "HIGH",
+    title: "Credential in properties",
+    file: targetFile,
+    affectedFile: targetFile,
+    startLine: 1,
+    endLine: 1,
+    evidence: "spring.datasource.password=secret123",
+  };
+
+  jobStore.create({
+    jobId,
+    repositoryUrl: "https://github.com/owner/repo",
+    repositoryName: "test-repo",
+    status: JOB_STATUS.CLONED,
+    workspacePath,
+    analysis: {
+      findings: [finding],
+    },
+  });
+
+  const mockPlan = {
+    findingId: finding.id,
+    diagnosis: "Committed password literal in source",
+    plan: ["Replace with environment variable reference"],
+    filesToChange: [targetFile],
+    proposedChanges: [
+      {
+        file: targetFile,
+        description: "Externalize datasource password",
+        patch: "- spring.datasource.password=secret123\n+ spring.datasource.password=${DB_PASSWORD}",
+      },
+    ],
+    validationPlan: [{ step: "Run backend tests", command: "mvn test", expectedOutcome: "PASS" }],
+  };
+
+  let capturedFinding = null;
+  const app = createApp({
+    jobStore,
+    remediationStore,
+    fetchRemediationPlan: async ({ finding: f, fileContent }) => {
+      capturedFinding = f;
+      assert.ok(fileContent.includes("spring.datasource.password=secret123"));
+      return mockPlan;
+    },
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const createRes = await fetch(`${baseUrl}/api/jobs/${jobId}/remediation-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ findingId: finding.id }),
+  });
+
+  assert.equal(createRes.status, 201);
+  const candidate = await createRes.json();
+
+  // Verify stored fields
+  assert.ok(candidate.remediationId);
+  assert.equal(candidate.jobId, jobId);
+  assert.equal(candidate.findingId, finding.id);
+  assert.ok(candidate.patch.includes("${DB_PASSWORD}"));
+  assert.deepEqual(candidate.files, [targetFile]);
+  assert.equal(candidate.status, "PROPOSED");
+  assert.ok(candidate.createdAt);
+
+  // Verify allowed statuses definition
+  assert.deepEqual(Object.values(REMEDIATION_STATUS).sort(), [
+    "APPLIED", "PATCH_FAILED", "PROPOSED", "REJECTED", "VALIDATED", "VALIDATION_FAILED",
+  ].sort());
+
+  // GET /api/jobs/:jobId/remediation
+  const listRes = await fetch(`${baseUrl}/api/jobs/${jobId}/remediation`);
+  assert.equal(listRes.status, 200);
+  const list = await listRes.json();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].remediationId, candidate.remediationId);
+  assert.equal(list[0].status, "PROPOSED");
+
+  // POST /api/jobs/:jobId/remediation/:remediationId/apply
+  const applyRes = await fetch(
+    `${baseUrl}/api/jobs/${jobId}/remediation/${candidate.remediationId}/apply`,
+    {
+      method: "POST",
+    },
+  );
+  assert.equal(applyRes.status, 200);
+  const applyData = await applyRes.json();
+  assert.ok(applyData.before);
+  assert.ok(applyData.after);
+  assert.ok(applyData.diff);
+  assert.deepEqual(applyData.changedFiles, [targetFile]);
+  assert.ok(applyData.validation);
+  assert.ok(Array.isArray(applyData.resolvedFindings));
+  assert.ok(Array.isArray(applyData.remainingFindings));
+  assert.equal(typeof applyData.scoreBefore, "number");
+  assert.equal(typeof applyData.scoreAfter, "number");
+  assert.equal(applyData.status, "VALIDATED");
+
+  // Original repository remains untouched!
+  const originalFileContent = await readFile(path.join(workspacePath, targetFile), "utf8");
+  assert.equal(originalFileContent, "spring.datasource.password=secret123\n");
+
+  await removeWorkspace(jobId);
+  await removeWorkspace(`${jobId}-before`);
+  await removeWorkspace(`${jobId}-after`);
+});
+
+test("POST /api/jobs/:jobId/analyze returns 404 for unknown job, 409 if not CLONED, 400 if FAILED", async (t) => {
+  const jobStore = new JobStore();
+  const app = createApp({ jobStore });
+  const baseUrl = await listenForTest(t, app);
+
+  // 404
+  const res404 = await fetch(`${baseUrl}/api/jobs/nonexistent-job/analyze`, { method: "POST" });
+  assert.equal(res404.status, 404);
+  assertStructuredError(await res404.json(), "JOB_NOT_FOUND");
+
+  // 409
+  jobStore.create({
+    jobId: "pending-job",
+    repositoryUrl: "https://github.com/owner/repo",
+    status: JOB_STATUS.CREATED,
+  });
+  const res409 = await fetch(`${baseUrl}/api/jobs/pending-job/analyze`, { method: "POST" });
+  assert.equal(res409.status, 409);
+  assertStructuredError(await res409.json(), "JOB_NOT_READY");
+
+  // 400
+  jobStore.create({
+    jobId: "failed-job",
+    repositoryUrl: "https://github.com/owner/repo",
+    status: JOB_STATUS.FAILED,
+    error: "clone failed",
+  });
+  const res400 = await fetch(`${baseUrl}/api/jobs/failed-job/analyze`, { method: "POST" });
+  assert.equal(res400.status, 400);
+  assertStructuredError(await res400.json(), "JOB_FAILED");
+});
+
 test("Workspace path resolver prevents path traversal and workspace escape", () => {
   assert.throws(
     () => resolveWorkspacePath("../outside"),
@@ -587,3 +891,4 @@ test("sanitizeErrorOutput redacts credentials and tokens", () => {
   assert.ok(!sanitized.includes("abc.xyz.123"));
   assert.ok(sanitized.includes("[REDACTED]"));
 });
+

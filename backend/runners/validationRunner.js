@@ -301,8 +301,9 @@ export async function runValidation({
         commandName: "npm",
         args: ["install", "--no-audit", "--no-fund"],
         workingDirectory: manifestDir,
-        timeoutMs: options.timeoutMs || 120_000,
+        timeoutMs: options.installTimeoutMs || 120_000,
         ...options,
+        timeoutMs: options.installTimeoutMs || 120_000,
       });
       installResult.workingDirectory = relWorkingDir;
       executions.push(installResult);
@@ -327,8 +328,9 @@ export async function runValidation({
             commandName: "npm",
             args: ["run", "build"],
             workingDirectory: manifestDir,
-            timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
+            timeoutMs: options.buildTimeoutMs || options.timeoutMs || DEFAULT_TIMEOUT_MS,
             ...options,
+            timeoutMs: options.buildTimeoutMs || options.timeoutMs || DEFAULT_TIMEOUT_MS,
           });
           buildResult.workingDirectory = relWorkingDir;
           executions.push(buildResult);

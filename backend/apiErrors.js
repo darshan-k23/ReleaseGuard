@@ -25,6 +25,11 @@ export function apiErrorHandler(error, req, res, next) {
     code = error.code;
     message = error.message;
     details = error.details;
+  } else if (error?.status && error?.code) {
+    status = error.status;
+    code = error.code;
+    message = error.message;
+    details = error.details || error.message;
   } else if (error?.type === "entity.parse.failed") {
     status = 400;
     code = "INVALID_JSON";

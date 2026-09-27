@@ -7,10 +7,15 @@ const SERVER_PORT_PATTERN = /^\s*server\.port\s*[:=]\s*(\d+)/m;
 export function runIntegrationRule(context) {
   const findings = [];
   const frontendSource = context.files.find((file) =>
-    /(^|\/)frontend\/src\/api\/client\.[cm]?[jt]sx?$/i.test(file.relativePath),
+    /(?:^|\/)(?:frontend\/)?src\/api\/client\.[cm]?[jt]sx?$/i.test(file.relativePath) ||
+    /(?:^|\/)api\/client\.[cm]?[jt]sx?$/i.test(file.relativePath) ||
+    context.files.some(() => API_BASE_PATTERN.test(file.text)),
   );
   const backendConfiguration = context.files.find((file) =>
-    /(^|\/)backend\/src\/main\/resources\/application\.(?:properties|ya?ml)$/i.test(file.relativePath),
+    /(?:^|\/)application(?:-[\w-]+)?\.(?:properties|ya?ml)$/i.test(file.relativePath) &&
+    SERVER_PORT_PATTERN.test(file.text),
+  ) || context.files.find((file) =>
+    /(?:^|\/)backend\/src\/main\/resources\/application\.(?:properties|ya?ml)$/i.test(file.relativePath),
   );
 
   const apiLine = frontendSource

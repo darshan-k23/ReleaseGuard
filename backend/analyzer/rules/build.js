@@ -43,31 +43,62 @@ function addBuildFinding(context, findings, source, result, target) {
 
 export async function runBuildRule(context) {
   const findings = [];
-  const frontendManifest = context.files.find((file) => file.relativePath === "frontend/package.json");
-  const backendPom = context.files.find((file) => file.relativePath === "backend/pom.xml");
   const checks = [];
 
-  if (!frontendManifest) {
-    checks.push(createCheck({
-      id: "shopsphere-frontend-build",
-      category: "Build",
-      status: CHECK_STATUS.NOT_RUN,
-      summary: "Frontend build was not run because frontend/package.json is missing.",
-      reason: "Frontend manifest missing",
-    }));
-  } else {
+  // 1. Authoritative validation context if provided
+  if (context.validation && Array.isArray(context.validation.executions)) {
+    const buildExecutions = context.validation.executions.filter((e) =>
+      e.command && (e.command.includes("build") || e.command.includes("package")),
+    );
+
+    for (const exec of buildExecutions) {
+      const isPass = exec.status === "PASS";
+      const isFail = exec.status === "FAIL";
+      const status = isPass ? CHECK_STATUS.PASS : isFail ? CHECK_STATUS.FAIL : CHECK_STATUS.NOT_RUN;
+      const target = exec.workingDirectory && exec.workingDirectory !== "." ? exec.workingDirectory : "root";
+      const checkId = `${target.replace(/[^a-zA-Z0-9_-]/g, "-")}-build`;
+
+      checks.push(
+        createCheck({
+          id: checkId,
+          category: "Build",
+          status,
+          summary: isPass
+            ? `Build completed successfully (${exec.command}).`
+            : isFail
+              ? `Build failed with exit code ${exec.exitCode} (${exec.command}).`
+              : `Build was not run (${exec.command}): ${exec.stderr || "Execution skipped"}.`,
+          command: exec.command,
+          exitCode: exec.exitCode,
+          stdout: exec.stdout,
+          stderr: exec.stderr,
+          durationMs: exec.durationMs,
+          reason: !isPass && !isFail ? exec.stderr : null,
+          timedOut: exec.status === "TIMEOUT",
+        }),
+      );
+    }
+    return { findings, checks };
+  }
+
+  // 2. Standalone fallback based only on detected manifests in context.files
+  const frontendManifest = context.files.find((file) => file.relativePath === "frontend/package.json");
+  const backendPom = context.files.find((file) => file.relativePath === "backend/pom.xml" || file.relativePath === "pom.xml");
+  const rootNodeManifest = !frontendManifest ? context.files.find((file) => file.relativePath === "package.json") : null;
+
+  if (frontendManifest) {
     const frontendResult = await context.runCommand("shopsphereFrontendBuild");
     const frontendStatus = resultStatus(frontendResult);
     addBuildFinding(context, findings, frontendManifest, frontendResult, "frontend");
     checks.push(createCheck({
-      id: "shopsphere-frontend-build",
+      id: "frontend-build",
       category: "Build",
       status: frontendStatus,
       summary: frontendStatus === CHECK_STATUS.PASS
-        ? "ShopSphere frontend production build completed."
+        ? "Frontend production build completed."
         : frontendStatus === CHECK_STATUS.FAIL
-          ? "ShopSphere frontend production build failed."
-          : "ShopSphere frontend build was not run.",
+          ? "Frontend production build failed."
+          : "Frontend build was not run.",
       command: frontendResult.command,
       exitCode: frontendResult.exitCode,
       stdout: frontendResult.stdout,
@@ -82,27 +113,19 @@ export async function runBuildRule(context) {
     }));
   }
 
-  if (!backendPom) {
-    checks.push(createCheck({
-      id: "shopsphere-backend-build",
-      category: "Build",
-      status: CHECK_STATUS.NOT_RUN,
-      summary: "Backend build was not run because backend/pom.xml is missing.",
-      reason: "Maven project missing",
-    }));
-  } else {
+  if (backendPom) {
     const backendResult = await context.runCommand("shopsphereBackendBuild");
     const backendStatus = resultStatus(backendResult);
     addBuildFinding(context, findings, backendPom, backendResult, "backend");
     checks.push(createCheck({
-      id: "shopsphere-backend-build",
+      id: "backend-build",
       category: "Build",
       status: backendStatus,
       summary: backendStatus === CHECK_STATUS.PASS
-        ? "ShopSphere backend package build completed (tests run separately)."
+        ? "Backend package build completed."
         : backendStatus === CHECK_STATUS.FAIL
-          ? "ShopSphere backend package build failed."
-          : "ShopSphere backend package build was not run.",
+          ? "Backend package build failed."
+          : "Backend package build was not run.",
       command: backendResult.command,
       exitCode: backendResult.exitCode,
       stdout: backendResult.stdout,
@@ -115,6 +138,40 @@ export async function runBuildRule(context) {
           : null,
       timedOut: backendResult.timedOut,
     }));
+  }
+
+  if (rootNodeManifest) {
+    let hasBuild = false;
+    try {
+      const parsed = JSON.parse(rootNodeManifest.text);
+      hasBuild = Boolean(parsed.scripts?.build);
+    } catch {}
+
+    if (hasBuild) {
+      const rootResult = await context.runCommand("nodeBuild");
+      const rootStatus = resultStatus(rootResult);
+      checks.push(createCheck({
+        id: "root-build",
+        category: "Build",
+        status: rootStatus,
+        summary: rootStatus === CHECK_STATUS.PASS
+          ? "Node build completed."
+          : rootStatus === CHECK_STATUS.FAIL
+            ? "Node build failed."
+            : "Node build was not run.",
+        command: rootResult.command,
+        exitCode: rootResult.exitCode,
+        stdout: rootResult.stdout,
+        stderr: rootResult.stderr,
+        durationMs: rootResult.durationMs,
+        reason: rootResult.missingTool
+          ? `Required tool unavailable: ${rootResult.missingTool}`
+          : rootResult.timedOut
+            ? "Build command timed out"
+            : null,
+        timedOut: rootResult.timedOut,
+      }));
+    }
   }
 
   return { findings, checks };

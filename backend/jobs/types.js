@@ -26,13 +26,16 @@ export function createRepositoryJob({
   completedAt = null,
   error = null,
   status = JOB_STATUS.CREATED,
+  stack = null,
   validation = null,
+  analysis = null,
+  assessment = null,
 } = {}) {
   if (!repositoryUrl) {
     throw new TypeError("repositoryUrl is required to create a repository job");
   }
 
-  return {
+  const base = {
     jobId,
     status,
     source,
@@ -47,4 +50,10 @@ export function createRepositoryJob({
     error,
     validation,
   };
+
+  if (stack !== null) base.stack = stack;
+  if (analysis !== null) base.analysis = analysis;
+  if (assessment !== null) base.assessment = assessment;
+
+  return base;
 }

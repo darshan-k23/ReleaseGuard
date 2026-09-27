@@ -35,13 +35,14 @@ export function findLine(source, matcher) {
 }
 
 export function createFinding(context, details) {
+  const targetFile = details.file || details.affectedFile;
   const evidence = createRelatedEvidence(
     context,
-    details.affectedFile,
+    targetFile,
     details.startLine,
   );
   const relatedEvidence = (details.relatedEvidence || []).map((item) =>
-    createRelatedEvidence(context, item.affectedFile, item.startLine),
+    createRelatedEvidence(context, item.file || item.affectedFile, item.startLine),
   );
   const evidenceFingerprint = createFindingFingerprint(
     details.ruleId,
@@ -57,6 +58,7 @@ export function createFinding(context, details) {
     severity: details.severity,
     status: "OPEN",
     title: details.title,
+    file: evidence.affectedFile,
     affectedFile: evidence.affectedFile,
     startLine: evidence.startLine,
     endLine: evidence.endLine,

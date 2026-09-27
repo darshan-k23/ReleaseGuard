@@ -103,9 +103,81 @@ test("unexpected analysis errors are structured and do not leak error or secret 
   assert.deepEqual(logs, ["ReleaseGuard API error: INTERNAL_ERROR"]);
 });
 
+test("POST /api/release-assessment forwards evidence to llm-service", async (t) => {
+  const mockAssessment = {
+    summary: "Release ready",
+    rootCauses: [],
+    riskAssessment: { level: "LOW", rationale: "All checks passed" },
+    recommendedFixes: [],
+    validationPlan: [],
+    confidence: 1,
+    limitations: [],
+  };
+
+  let forwardedPayload = null;
+  const app = createApp({
+    fetchAssessment: async (payload) => {
+      forwardedPayload = payload;
+      return mockAssessment;
+    },
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const res = await fetch(`${baseUrl}/api/release-assessment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repository: "my-repo", stack: ["Node"] }),
+  });
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), mockAssessment);
+  assert.equal(forwardedPayload.repository, "my-repo");
+});
+
+test("POST /api/jobs/:jobId/assessment calls LLM assessment with job evidence", async (t) => {
+  const { JobStore, JOB_STATUS } = await import("./jobs/index.js");
+  const jobStore = new JobStore();
+  const jobId = "job-assessment-test";
+  jobStore.create({
+    jobId,
+    repositoryUrl: "https://github.com/org/repo",
+    repositoryName: "org/repo",
+    status: JOB_STATUS.COMPLETED,
+    validation: { status: "PASS" },
+  });
+
+  const mockAssessment = {
+    summary: "Job assessment complete",
+    rootCauses: [],
+    riskAssessment: { level: "LOW", rationale: "Passed" },
+    recommendedFixes: [],
+    validationPlan: [],
+    confidence: 0.99,
+    limitations: [],
+  };
+
+  const app = createApp({
+    jobStore,
+    fetchAssessment: async (evidence) => {
+      assert.equal(evidence.repository, "org/repo");
+      assert.deepEqual(evidence.validation, { status: "PASS" });
+      return mockAssessment;
+    },
+  });
+  const baseUrl = await listenForTest(t, app);
+
+  const res = await fetch(`${baseUrl}/api/jobs/${jobId}/assessment`, { method: "POST" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), mockAssessment);
+
+  const updatedJob = jobStore.get(jobId);
+  assert.deepEqual(updatedJob.assessment, mockAssessment);
+});
+
 test("unknown API routes return structured errors", async (t) => {
   const baseUrl = await listenForTest(t, createApp());
   const response = await fetch(`${baseUrl}/api/not-a-route`);
   assert.equal(response.status, 404);
   assertStructuredError(await response.json(), "ROUTE_NOT_FOUND");
 });
+

@@ -1,0 +1,16 @@
+{
+  "name": "critically-blocked-service",
+  "version": "1.0.0",
+  "description": "ReleaseGuard demo repository - critically-blocked-service",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "build": "node scripts/build.js",
+    "test": "node --test"
+  },
+  "dependencies": {},
+  "optionalDependencies": {
+    "unlocked-demo-package": "^1.0.0"
+  }
+}

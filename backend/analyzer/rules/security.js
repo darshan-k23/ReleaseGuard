@@ -44,17 +44,17 @@ export function runSecurityRule(context) {
             createFinding(context, {
               ruleId: "SEC-HARDCODED-CREDENTIAL",
               category: "Security",
-              severity: isSyntheticSentinel ? "LOW" : "HIGH",
+              severity: "HIGH",
               title: isSyntheticSentinel
-                ? "Synthetic credential sentinel is present"
+                ? "Hardcoded synthetic credential sentinel is present"
                 : "Credential-like literal is committed in source",
               affectedFile: source.relativePath,
               startLine: index + 1,
               explanation: isSyntheticSentinel
-                ? "This exact, documented fake sentinel is reported only to exercise the baseline detector; it is not a usable credential."
+                ? "This exact, documented fake sentinel is reported as a security finding to exercise release blocking; it is not a usable production credential."
                 : "A credential-like key is assigned a non-placeholder literal rather than an environment reference.",
               risk: isSyntheticSentinel
-                ? "No real secret is exposed; the marker exists solely for the safe demo baseline."
+                ? "Committed secrets or sentinels in source code violate release policy and block release gates."
                 : "A committed credential may be exposed to repository readers and reused outside the demo.",
               recommendedFix: isSyntheticSentinel
                 ? "Remove the sentinel or replace it with an environment reference when remediating the baseline."
