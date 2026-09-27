@@ -3,6 +3,15 @@ import path from "node:path";
 import { createCheck, CHECK_STATUS } from "../types.js";
 import { createFinding, findLine } from "../utils/evidence.js";
 
+function resultStatus(result) {
+  if (result.missingTool || result.timedOut || result.exitCode === null) {
+    return CHECK_STATUS.NOT_RUN;
+  }
+  return result.exitCode === 0
+    ? CHECK_STATUS.PASS
+    : CHECK_STATUS.FAIL;
+}
+
 async function readSurefireSummary(projectRoot) {
   const reportDirectory = path.join(projectRoot, "backend", "target", "surefire-reports");
   let reportNames;
