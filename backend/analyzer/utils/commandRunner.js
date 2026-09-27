@@ -4,6 +4,7 @@ import path from "node:path";
 import { DEMO_PROJECT_ROOT, isDemoProjectRoot } from "../projectRoot.js";
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_CHARS = 12_000;
+
 const COMMANDS = {
   shopsphereFrontendBuild: {
     cwd: (projectRoot) => path.join(projectRoot, "frontend"),
@@ -14,16 +15,34 @@ const COMMANDS = {
       path.join(projectRoot, "frontend", "node_modules", "vite", "bin", "vite.js"),
     missingTool: "ShopSphere frontend dependencies (Vite)",
   },
+
   shopsphereBackendTests: {
     cwd: (projectRoot) => path.join(projectRoot, "backend"),
     executable: "maven",
     args: ["-B", "-q", "clean", "test"],
     timeoutMs: DEFAULT_TIMEOUT_MS,
   },
+
   shopsphereBackendBuild: {
     cwd: (projectRoot) => path.join(projectRoot, "backend"),
     executable: "maven",
     args: ["-B", "-q", "-DskipTests", "package"],
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+  },
+
+  // Generic Node.js fallback commands for non-ShopSphere demo repositories.
+  // These are fixed allowlisted commands and do not use shell interpolation.
+  nodeTests: {
+    cwd: (projectRoot) => projectRoot,
+    executable: "npm",
+    args: ["test"],
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+  },
+
+  nodeBuild: {
+    cwd: (projectRoot) => projectRoot,
+    executable: "npm",
+    args: ["run", "build"],
     timeoutMs: DEFAULT_TIMEOUT_MS,
   },
 };
