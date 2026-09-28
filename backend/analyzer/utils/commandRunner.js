@@ -182,9 +182,6 @@ export async function runAllowlistedCommand(commandId, projectRoot = DEMO_PROJEC
   }
 
   const startedAt = Date.now();
-  const isShopSphereCommand = commandId.startsWith("shopsphere");
-
-if (isShopSphereCommand) {
   if (!isDemoProjectRoot(projectRoot)) {
     return {
       command: null,
@@ -196,10 +193,7 @@ if (isShopSphereCommand) {
       missingTool: "Command execution is restricted to the ShopSphere demo repository",
     };
   }
-
   projectRoot = DEMO_PROJECT_ROOT;
-}
-
   if (specification.requiredFile) {
     try {
       await access(specification.requiredFile(projectRoot));
