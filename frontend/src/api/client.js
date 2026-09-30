@@ -1,11 +1,23 @@
 // Dev uses the local Express API (scripts/dev.mjs starts it on 8090).
 // Production builds default to the deployed analyzer API; override with
 // VITE_API_BASE at build time if the backend moves.
-const API_BASE =
-  import.meta.env.VITE_API_BASE ||
-  (import.meta.env.DEV
+
+// A scheme-less VITE_API_BASE (e.g. "example.com/api") would otherwise be
+// fetched as a RELATIVE URL against the frontend's own origin, which returns
+// the host's 404 page instead of API data. Normalize defensively.
+function normalizeApiBase(value) {
+  let base = String(value).trim().replace(/^["']+|["']+$/g, "");
+  if (base && !/^https?:\/\//i.test(base)) {
+    base = `https://${base}`;
+  }
+  return base.replace(/\/+$/, "");
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE
+  ? normalizeApiBase(import.meta.env.VITE_API_BASE)
+  : import.meta.env.DEV
     ? "http://localhost:8090/api"
-    : "https://releaseguardbackend.freebuff.app/api");
+    : "https://releaseguardbackend.freebuff.app/api";
 
 async function request(path, options) {
   const res = await fetch(`${API_BASE}${path}`, options);
