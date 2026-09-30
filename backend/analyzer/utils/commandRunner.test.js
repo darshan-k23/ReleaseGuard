@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import { runAllowlistedCommand } from "./commandRunner.js";
-import { DEMO_PROJECT_ROOT } from "../projectRoot.js";
+import { getDemoProjectRoot } from "../projectRoot.js";
 
 function fakeChild() {
   const child = new EventEmitter();
@@ -16,7 +16,7 @@ function fakeChild() {
 test("command runner rejects command IDs outside the allowlist", async () => {
   let launched = false;
   await assert.rejects(
-    runAllowlistedCommand("run-user-shell", DEMO_PROJECT_ROOT, {
+    runAllowlistedCommand("run-user-shell", getDemoProjectRoot(), {
       spawnProcess: () => { launched = true; return fakeChild(); },
     }),
     /not allowlisted/,
@@ -35,7 +35,7 @@ test("command runner refuses roots outside ShopSphere before resolving tools", a
 });
 
 test("missing Maven returns a NOT RUN-compatible tool result", async () => {
-  const result = await runAllowlistedCommand("shopsphereBackendTests", DEMO_PROJECT_ROOT, {
+  const result = await runAllowlistedCommand("shopsphereBackendTests", getDemoProjectRoot(), {
     resolveExecutable: async () => null,
   });
   assert.equal(result.exitCode, null);
@@ -45,7 +45,7 @@ test("missing Maven returns a NOT RUN-compatible tool result", async () => {
 
 test("command timeout terminates the child and returns no fabricated exit status", async () => {
   let terminated = false;
-  const result = await runAllowlistedCommand("shopsphereBackendTests", DEMO_PROJECT_ROOT, {
+  const result = await runAllowlistedCommand("shopsphereBackendTests", getDemoProjectRoot(), {
     resolveExecutable: async () => "fake-maven",
     platform: "linux",
     timeoutMs: 5,
@@ -64,7 +64,7 @@ test("command timeout terminates the child and returns no fabricated exit status
 });
 
 test("captured command output is redacted and bounded", async () => {
-  const result = await runAllowlistedCommand("shopsphereBackendTests", DEMO_PROJECT_ROOT, {
+  const result = await runAllowlistedCommand("shopsphereBackendTests", getDemoProjectRoot(), {
     resolveExecutable: async () => "fake-maven",
     platform: "linux",
     spawnProcess: () => {

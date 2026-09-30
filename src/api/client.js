@@ -1,8 +1,24 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE || "http://localhost:8090/api";
+// Same-origin relative "/api" works in every environment: Next.js API routes
+// in production, and the dev proxy locally. Set NEXT_PUBLIC_API_BASE to an
+// absolute URL only when the API is hosted on a different origin.
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 
 async function request(path, options) {
-  const res = await fetch(`${API_BASE}${path}`, options);
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, options);
+  } catch (error) {
+    // Network-level failures (server down, DNS, CORS, mixed content) surface
+    // here as "Failed to fetch". Give users an actionable message instead.
+    if (error instanceof TypeError) {
+      const exception = new Error(
+        `Cannot reach the ReleaseGuard API at ${API_BASE}${path}. If the API runs on a separate origin, set NEXT_PUBLIC_API_BASE to its URL and enable CORS.`,
+      );
+      exception.code = "API_UNREACHABLE";
+      throw exception;
+    }
+    throw error;
+  }
   const body = await res.json();
   if (!res.ok) {
     const error = body.error;

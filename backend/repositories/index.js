@@ -4,7 +4,7 @@ export {
   createWorkspace,
   removeWorkspace,
   workspaceExists,
-  WORKSPACES_ROOT,
+  getWorkspacesRoot,
 } from "./workspace.js";
 export {
   cloneRepository,

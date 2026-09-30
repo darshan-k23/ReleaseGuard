@@ -1,5 +1,5 @@
 import { cp, rm, access } from "node:fs/promises";
-import { resolveWorkspacePath, WORKSPACES_ROOT } from "../repositories/workspace.js";
+import { resolveWorkspacePath, getWorkspacesRoot } from "../repositories/workspace.js";
 import { analyzeRepository } from "../analyzer/index.js";
 import { detectStack } from "../analyzer/stackDetector.js";
 import { runValidation } from "../runners/index.js";
@@ -23,7 +23,7 @@ export async function executeIsolatedRemediation({
   candidate,
   finding = null,
   job = null,
-  workspaceRoot = WORKSPACES_ROOT,
+  workspaceRoot = getWorkspacesRoot(),
   remediationStore = null,
   analyze = analyzeRepository,
   detectRepoStack = detectStack,

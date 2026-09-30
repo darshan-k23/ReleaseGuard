@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { DEMO_PROJECT_ROOT } from "./projectRoot.js";
+import { getDemoProjectRoot } from "./projectRoot.js";
 import { createCheck, CHECK_STATUS, CATEGORIES } from "./types.js";
 import { walkProject } from "./utils/fileWalker.js";
 import { runAllowlistedCommand } from "./utils/commandRunner.js";
@@ -50,7 +50,7 @@ export function deriveProject(files, analyzedAt = null, customMetadata = {}) {
   };
 }
 
-export async function getProjectMetadata(projectRoot = DEMO_PROJECT_ROOT) {
+export async function getProjectMetadata(projectRoot = getDemoProjectRoot()) {
   const files = await walkProject(projectRoot);
   return deriveProject(files);
 }
@@ -165,7 +165,7 @@ function createStatusSummary(status, findings, checks) {
   return `No high-severity blocker was found and all applicable validation checks completed. ${validationSummary} Manual release review is still required.`;
 }
 
-export async function analyzeRepository(projectRoot = DEMO_PROJECT_ROOT, options = {}) {
+export async function analyzeRepository(projectRoot = getDemoProjectRoot(), options = {}) {
   const startedAt = Date.now();
   const root = path.resolve(projectRoot);
   const files = await walkProject(root);

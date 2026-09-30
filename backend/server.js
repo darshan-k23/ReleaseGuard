@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ApiError, apiErrorHandler, notFoundHandler } from "./apiErrors.js";
 import { analyzeRepository, getProjectMetadata, detectStack } from "./analyzer/index.js";
@@ -21,8 +22,36 @@ import { defaultRemediationStore, executeIsolatedRemediation } from "./remediati
 import { readFile, cp } from "node:fs/promises";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const DEMO_REPOSITORIES_ROOT = path.resolve(currentDir, "..", "demo-repositories");
-const DEMO_PROJECT_ROOT = path.resolve(currentDir, "..", "demo-project");
+// RELEASEGUARD_ROOT lets embedded deployments (e.g. Next.js route handlers,
+// where this module may be bundled) anchor repo-relative paths to a known
+// directory instead of import.meta.url-derived locations.
+//
+// All of these are resolved at CALL time, not at module evaluation: the
+// pages/api catch-all sets these env vars in its importing module, and ESM
+// evaluates static imports before any of that module's statements run. A
+// module-level const would freeze the un-anchored path (inside the read-only
+// serverless bundle) before the override is visible.
+function getRepoRoot() {
+  return path.resolve(process.env.RELEASEGUARD_ROOT || path.resolve(currentDir, ".."));
+}
+
+function getDemoRepositoriesRoot() {
+  return process.env.RELEASEGUARD_DEMO_REPOSITORIES_ROOT
+    ? path.resolve(process.env.RELEASEGUARD_DEMO_REPOSITORIES_ROOT)
+    : path.resolve(getRepoRoot(), "demo-repositories");
+}
+
+function getDemoProjectRoot() {
+  return process.env.RELEASEGUARD_DEMO_PROJECT_ROOT
+    ? path.resolve(process.env.RELEASEGUARD_DEMO_PROJECT_ROOT)
+    : path.resolve(getRepoRoot(), "demo-project");
+}
+
+// Built frontend output (frontend/dist). Served by this process in production
+// so the dashboard and the API share one origin and no CORS/localhost issues.
+function getFrontendDistRoot() {
+  return path.resolve(getRepoRoot(), "frontend", "dist");
+}
 
 export function createApp({
   analyze = analyzeRepository,
@@ -188,8 +217,8 @@ export function createApp({
         });
 
         const demoSourcePath = targetDemo.toLowerCase() === "shopsphere"
-          ? DEMO_PROJECT_ROOT
-          : path.join(DEMO_REPOSITORIES_ROOT, targetDemo);
+          ? getDemoProjectRoot()
+          : path.join(getDemoRepositoriesRoot(), targetDemo);
 
         try {
           await cp(demoSourcePath, workspacePath, { recursive: true });
@@ -647,7 +676,7 @@ export function createApp({
     }
   });
 
-  app.post("/api/jobs/:jobId/assess", async (req, res, next) => {
+  async function handleJobAssessment(req, res, next) {
     try {
       const { jobId } = req.params;
       const job = jobStore.get(jobId);
@@ -747,6 +776,55 @@ export function createApp({
       });
 
       res.json(finalAnalysis);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  app.post("/api/jobs/:jobId/assess", handleJobAssessment);
+
+  // Job-scoped LLM assessment: returns just the assessment payload
+  // (unlike /assess, which returns the full job analysis).
+  app.post("/api/jobs/:jobId/assessment", async (req, res, next) => {
+    try {
+      const { jobId } = req.params;
+      const job = jobStore.get(jobId);
+      if (!job) {
+        throw new ApiError(
+          404,
+          "JOB_NOT_FOUND",
+          `Job '${jobId}' not found`,
+          "Check the jobId and try again.",
+        );
+      }
+
+      if (job.status === JOB_STATUS.FAILED) {
+        throw new ApiError(
+          400,
+          "JOB_FAILED",
+          "Repository clone failed for this job.",
+          job.error || "Check the job details for error information.",
+        );
+      }
+
+      if (job.status !== JOB_STATUS.CLONED && job.status !== JOB_STATUS.COMPLETED) {
+        throw new ApiError(
+          409,
+          "JOB_NOT_READY",
+          `Job is currently ${job.status}.`,
+          "Wait for the job to reach CLONED status before requesting assessment.",
+        );
+      }
+
+      const assessment = await fetchAssessment({
+        repository: job.repositoryName || job.repositoryUrl || "workspace",
+        stack: job.stack || [],
+        validation: job.validation || null,
+        findings: job.analysis?.findings || [],
+        metrics: job.analysis?.metrics || {},
+      });
+      jobStore.update(jobId, { assessment });
+      res.json(assessment);
     } catch (error) {
       next(error);
     }
@@ -955,6 +1033,23 @@ export function createApp({
     res.json({ status: "ok" });
   });
 
+  // Serve the built frontend when it exists (production single-process mode).
+  // Registered after all API routes so /api/* wins; unknown /api paths still
+  // fall through to the structured JSON 404 below.
+  if (existsSync(getFrontendDistRoot())) {
+    app.use(express.static(getFrontendDistRoot()));
+    app.get(/^\/(?!api(\/|$)).*/, (req, res, next) => {
+      const indexFile = path.join(getFrontendDistRoot(), "index.html");
+      if (existsSync(indexFile)) {
+        res.sendFile(indexFile, (sendError) => {
+          if (sendError) next(sendError);
+        });
+        return;
+      }
+      next();
+    });
+  }
+
   app.use(notFoundHandler);
   app.use(apiErrorHandler);
   return app;
@@ -964,7 +1059,7 @@ const app = createApp();
 
 export default app;
 
-export function startServer({ port = process.env.PORT || 8090, host = "127.0.0.1" } = {}) {
+export function startServer({ port = process.env.PORT || 8090, host = process.env.HOST || "0.0.0.0" } = {}) {
   const server = app.listen(port, host, () => {
     console.log(
       `ReleaseGuard backend listening on http://${host}:${server.address().port}`

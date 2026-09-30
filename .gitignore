@@ -1,9 +1,12 @@
 node_modules/
 dist/
 build/
+.next/
 .env
 .env.*
 *.log
+test-results/
+playwright-report/
 
 backend/workspaces/
 backend/tmp/
@@ -14,3 +17,6 @@ Thumbs.db
 
 .idea/
 .vscode/
+
+# Freebuff platform staging snapshot (not part of the app)
+isolate/

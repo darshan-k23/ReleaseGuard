@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import Header from "./components/Header.jsx";
 import RepositoryEntry from "./components/RepositoryEntry.jsx";

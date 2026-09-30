@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
-import { DEMO_PROJECT_ROOT, isDemoProjectRoot } from "../projectRoot.js";
+import { getDemoProjectRoot, isDemoProjectRoot } from "../projectRoot.js";
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_CHARS = 12_000;
 const COMMANDS = {
@@ -156,7 +156,7 @@ function windowsBatchInvocation(executable, args) {
   return `""${executable}" ${args.join(" ")}"`;
 }
 
-export async function runAllowlistedCommand(commandId, projectRoot = DEMO_PROJECT_ROOT, options = {}) {
+export async function runAllowlistedCommand(commandId, projectRoot = getDemoProjectRoot(), options = {}) {
   const specification = COMMANDS[commandId];
   if (!specification) {
     throw new Error("Command is not allowlisted");
@@ -174,7 +174,7 @@ export async function runAllowlistedCommand(commandId, projectRoot = DEMO_PROJEC
       missingTool: "Command execution is restricted to the ShopSphere demo repository",
     };
   }
-  projectRoot = DEMO_PROJECT_ROOT;
+  projectRoot = getDemoProjectRoot();
   if (specification.requiredFile) {
     try {
       await access(specification.requiredFile(projectRoot));
