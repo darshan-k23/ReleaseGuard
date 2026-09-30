@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --surface-base: #0f1419;
+  --surface-raised: #161c24;
+  --surface-border: #2b3542;
+  --surface-border-strong: #3a4655;
+  --focus-ring: #34d399;
+}
+
+body {
+  background-color: var(--surface-base);
+  color: #e6e9ee;
+  min-width: 320px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(52 211 153 / 25%);
+  color: #f8fafc;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:not(:disabled),
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.console-panel {
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 2%);
+}
+
+.console-panel-interactive {
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.console-panel-interactive:hover {
+  border-color: var(--surface-border-strong);
+}
+
+.console-status-transition {
+  animation: console-status-in 180ms ease-out both;
+}
+
+@keyframes console-status-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #2b3543;
+  border-radius: 999px;
+}
